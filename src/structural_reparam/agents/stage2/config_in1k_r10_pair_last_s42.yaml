@@ -1,0 +1,163 @@
+# The paper's pair on full-resolution ImageNet: does real scale change anything?
+#
+# Written 2026-09-05. The pair ladder on CIFAR-100 (paper tables 25 to 27) and on
+# ImageNet32 established two things and left one question. Both of the paper's
+# mechanisms fire on every residual network tested, at every depth: the stem opens
+# 81 to 94 percent of its channels at 137 to 155 degrees with its separation axis
+# on v_max at 0.997 or better, and the last 3x3 convolution closes. And the
+# benefit is small on ResNets and absent on ResNet-18. Every ImageNet result the
+# project has is at 32 pixels, where a 1000-class problem is compressed into the
+# same 3072 pixels CIFAR uses.
+#
+# This campaign asks whether real resolution changes either half of that: the
+# paper's first-block pair and last-block pair, on ResNet-10 and ResNet-18, on
+# full-resolution ILSVRC2012 at 224 pixels.
+#
+# --------------------------------------------------------------------------------
+# The networks and the positions
+# --------------------------------------------------------------------------------
+# `resnet_pair_lab.build_paired_resnet` turns every 3x3 convolution and its
+# normalization into the paper's SharedScaleRepVGGBlock in shared-gamma mode, so
+# `single` is the all-one-branch network -- exactly the stock ResNet's parameter
+# count and function -- and an arm is a branch count per position in forward order.
+# `stem="imagenet"` gives it torchvision's 224-pixel input stage, a stride-2
+# convolution followed by a 3x3 stride-2 max-pool, with the kernel held at 3x3
+# rather than torchvision's 7x7: position 0 is where the spectral cooling mechanism
+# is measured, that mechanism is a statement about the covariance of the 3x3
+# patches a kernel sees on raw pixels, and a 7x7 stem would pair a different
+# operator against a 49-pixel patch covariance.
+#
+#   ResNet-10   widths 64/128/256/512, one BasicBlock per stage    nine 3x3 convs
+#   ResNet-18   widths 64/128/256/512, two BasicBlocks per stage   seventeen
+#
+# `pair_last` pairs position 0, the stem, and the last 3x3 convolution, and nothing
+# else. THE JUNCTION THE LAST PAIR SITS AT: that position is `layer4.N.conv2`,
+# whose normalization is applied before the residual addition, so its gamma scales
+# ONE ADDEND of a sum against a skip path it does not touch, and not the logits.
+# In the paper's plain stack the same gamma multiplies everything the classifier
+# sees, which is what makes the radial boost a scale there. A last-position pair
+# here is therefore a weaker claim, and that is the first thing to recall if this
+# term comes out small; `resnet_pair_lab.py` documents it in full.
+#
+# --------------------------------------------------------------------------------
+# The recipe
+# --------------------------------------------------------------------------------
+# SGD, momentum 0.9, learning rate 0.1 at batch 256, cosine over 40 epochs,
+# kernel-only weight decay 1e-4, random resized crop to 224 and a horizontal flip
+# for training, resize 256 and centre crop 224 for validation, ImageNet mean and
+# standard deviation. Full float32: no mixed precision, no torch.compile, no nvJPEG
+# and no PIL draft decoding, because the last two change decoded pixel values and
+# this project's precision stance (data/imagenet_records.py) is that the pixels are
+# ILSVRC2012's own.
+#
+# FORTY EPOCHS IS DELIBERATE and is not a shortened version of a longer run. The
+# effect the paper measures is a speed effect and ImageNet is never interpolated,
+# so this is reported as a 40-epoch cosine cell and its absolute accuracies are
+# comparable only with other 40-epoch results.
+#
+# --------------------------------------------------------------------------------
+# The data, and what the probe measures
+# --------------------------------------------------------------------------------
+# The pixels are the original ILSVRC2012 JPEG bytes in the Thunder image
+# `structural-reparam-in1k`, read as 144 indexed record shards by
+# `structural_reparam.data.imagenet_records` -- never `data/imagenet.py`, whose
+# ImageFolder image no longer exists. `warm: true` reads all 143 GiB of shards
+# sequentially once at start, which on the lazy-loading overlay the snapshot is
+# served over is what turns the first epoch from a network-bound crawl into a
+# local read. The probe's own covariance loader never warms, by construction.
+#
+# `pair_channel_open` reports, for position 0 and every paired position: the count
+# of channels open beyond 10 degrees, the median Sigma-whitened branch angle over
+# those open channels only, the median alignment of the separation axis with v_max,
+# and, added for this campaign, the selection predictor mu_eff =
+# (lambda_max - lambda_next) / tr Sigma of that block's input patch covariance,
+# estimated on the 224-pixel augmented training stream at the stem's own patch size
+# and stride. CIFAR-100 reads 0.633 and ImageNet32 0.626; what a 224-pixel stem at
+# stride 2 reads has never been measured, and it is what says whether the paper's
+# section 3.6 prediction applies to this cell at all.
+#
+# --------------------------------------------------------------------------------
+# Cost, and the shape of the campaign
+# --------------------------------------------------------------------------------
+# One arm per instance: production A100, 1 GPU, 16 vCPUs, submitted with
+# `--imagenet-full --gpus 1`. The pipeline is JPEG-decode-bound at about 107 images
+# per second per worker and 14 workers, so roughly 14 minutes an epoch and about
+# 9.5 to 10.5 hours a run including snapshot restore and the warm pass. Twelve runs
+# -- four arms at seeds 42, 43 and 44 -- is about 120 A100-hours against a budget of
+# 130, so the campaign runs as a pilot of these four seed-42 arms first, is read
+# back, and only then are the other two seeds issued.
+#
+# ONE FILE PER ARM, one seed inside each, so each arm is its own process on its own
+# instance and its own W&B run.
+#
+# THIS SHARD: ResNet-10 (one BasicBlock per stage, nine 3x3 convolutions), arm `pair_last` -- the last 3x3 convolution paired and nothing else: the radial boost term alone -- seed 42.
+# WAVE 2 OF directives/heavy_runs.md, THE DECOMPOSITION. The seed-42 pilot ran only
+# the combined `pair_both` arm, so its +0.80 train and +0.70 test on ResNet-10 cannot
+# be attributed: the paper's whole structure is that the benefit is a first-block term
+# plus a last-block term, and at 224 pixels neither has ever been measured alone. This
+# arm is one of those two terms. Read against the `single` of the same seed, and against
+# `pair_both` of the same seed for additivity, which on CIFAR held to +0.08 +/- 0.15.
+#
+experiment:
+  name: stage2_resnetpair_in1k_r10_pair_last_s42
+  description: >-
+    ResNet-10 (one BasicBlock per stage, nine 3x3 convolutions) on full-resolution ImageNet-1k at 224 pixels, seed 42, arm pair_last. 40 epochs, cosine from 0.1 at batch 256, kernel-only weight decay 1e-4, 1000 classes, 3x3 stride-2 ImageNet stem.
+base_seed: 42
+num_seeds: 1
+job:
+  # The resumable loop (2026-09-06). Thunder panics cost this campaign four
+  # runs in 31 A100-hours, one of them at epoch 32 of 40, because the generic
+  # trainer cannot continue an interrupted run. This module is that trainer's
+  # arithmetic with a per-epoch checkpoint -- model, optimizer, scheduler,
+  # epoch and generator state -- carried off the box as a W&B artifact, so a
+  # restarted attempt resumes instead of starting over.
+  entry_module: structural_reparam.agents.stage2.train_resumable
+dataset:
+  name: imagenet_full
+  target: structural_reparam.data.imagenet_records.build_loaders
+  # num_workers is left to the loader's own default (one per core less two, so 14
+  # on a 16-vCPU instance); `warm` is the one-time sequential read of the shards.
+  args: {data_dir: data/imagenet_full, image_size: 224, batch_size: 256, augment: true, download: false, warm: true}
+model:
+  name: resnet_pair_ladder_imagenet
+  target: structural_reparam.agents.stage2.resnet_pair_lab.build_paired_resnet
+  args: {num_classes: 1000, widths: [64, 128, 256, 512], blocks_per_stage: [1, 1, 1, 1], stem: imagenet, block_branches: [1, 1, 1, 1, 1, 1, 1, 1, 1], mode: shared_gamma}
+  variants:
+    # the last 3x3 convolution paired and nothing else: the radial boost term alone
+    - {name: pair_last_s42, args: {block_branches: [1, 1, 1, 1, 1, 1, 1, 1, 2]}}
+train:
+  epochs: 40
+  optimizer:
+    target: structural_reparam.agents.stage2.resnet_pair_lab.build_pair_resnet_sgd
+    args: {kernel_only_wd: true}
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 0.0001
+  scheduler: cosine
+  eval_interval: 1
+  # A heartbeat every 500 steps, about every 85 seconds: an epoch here is 5004
+  # steps and 14 minutes, so without one a stalled loader is indistinguishable from
+  # a slow epoch for a quarter of an hour.
+  heartbeat_every: 500
+metrics: [train_loss, train_accuracy, test_loss, test_accuracy]
+probes:
+  mechanistic: {enabled: false}
+  pair_channel_open:
+    enabled: true
+    # Ten refreshes' worth of decoding is not free at this resolution: the
+    # covariance sweep runs its own loader single-process, so 20 batches cost about
+    # a minute. Every tenth epoch is enough for a statistic that is the data's own.
+    cov_every_epochs: 10
+    input_cov_batches: 20
+    step_every: 500
+    step_log_epochs: 3
+    open_angle_deg: 10.0
+  checkpoint:
+    enabled: true
+    epochs: [0, 5, 20, 40]
+logging:
+  backend: wandb
+  project: claude-autonomous-reparam
+  group: stage2_resnetpair_in1k_r10
+  job_type: train
+  output_dir: outputs/stage2_resnetpair_in1k_r10_pair_last_s42

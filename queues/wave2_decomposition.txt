@@ -1,0 +1,26 @@
+# Wave 2 of directives/heavy_runs.md: the decomposition.
+#
+# The pilot ran only the combined arm, so its gain cannot be attributed to either
+# mechanism. These arms pair ONE position each -- the stem alone (spectral
+# cooling) or the last 3x3 convolution alone (the radial boost) -- and are read
+# against the `single` of the same seed, and against `pair_both` of the same seed
+# for additivity, which on CIFAR held to +0.08 +/- 0.15.
+#
+# Seed 42 first: its singles already exist from the pilot, so the first two runs
+# alone give the ResNet-10 split. Seeds 43 and 44 need wave 1's singles, so do
+# not start those until wave 1 has finished.
+#
+# Twelve runs.
+
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_first_s42.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_last_s42.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_first_s42.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_last_s42.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_first_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_last_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_first_s44.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_last_s44.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_first_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_last_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_first_s44.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_last_s44.yaml

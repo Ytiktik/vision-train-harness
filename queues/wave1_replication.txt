@@ -1,0 +1,22 @@
+# Wave 1 of directives/heavy_runs.md: replication of the seed-42 pilot.
+#
+# Order matters. Each `single` is immediately followed by the `pair_both` of the
+# same seed, so that if the queue is stopped early every completed prefix still
+# yields whole paired differences rather than orphaned arms. The paired per-seed
+# difference is the quantity; a pair without its own single is not half a result.
+#
+# ResNet-10 first: it is the network the pilot showed an effect on (+0.80 train,
+# +0.70 test at seed 42) and the cheaper of the two, so the replication that
+# decides whether that was real lands first.
+#
+# Eight runs. On the pilot's Thunder rates this is about 73 GPU-hours; on a
+# 24-core host it should be faster, since these runs are fed by JPEG decode.
+
+src/structural_reparam/agents/stage2/config_in1k_r10_single_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_both_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_single_s44.yaml
+src/structural_reparam/agents/stage2/config_in1k_r10_pair_both_s44.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_single_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_both_s43.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_single_s44.yaml
+src/structural_reparam/agents/stage2/config_in1k_r18_pair_both_s44.yaml
