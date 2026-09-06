@@ -73,7 +73,7 @@ class RecordShardDataset(torch.utils.data.Dataset):
         if not self.shards:
             raise FileNotFoundError(
                 f"No {split} record shards under {self.dir}. Build the image first: "
-                "python scripts/bootstrap_thunder_snapshot.py --imagenet-full"
+                "python scripts/prefetch_imagenet_full.py --data-dir <dir>"
             )
         if len(index) and int(index["shard"].max()) >= len(self.shards):
             raise RuntimeError(
